@@ -380,7 +380,7 @@ app.get('/authorized', async (req, res) => {
     oAuth2Client.setCredentials(tokens);
     fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
     gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-    return res.redirect('http://localhost:3001/gmail');
+    return res.redirect('https://automailer-frontend-production.up.railway.app/gmail');
   }
   catch (error) {
     console.error('Error during OAuth callback:', error);
