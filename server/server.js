@@ -21,10 +21,7 @@ const oAuth2Client = new OAuth2(
   credentials.web.redirect_uris[0]
 );
 
-let authorized = null;
-let gmail = null;
-let userdata = null;
-let token = null;
+
 
 // Middleware to parse JSON request bodies
 app.use(bodyParser.json());
@@ -288,10 +285,9 @@ app.post('/send',async (req, res) => {
   const tokenPart = authHeader.replace('Bearer ', '');
   const decodedToken = Buffer.from(tokenPart, 'base64').toString();
   const tokens = JSON.parse(decodedToken);
-  token = tokens;
   console.log('Decoded token:', tokens);
   oAuth2Client.setCredentials(tokens);
-  gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+  const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
   
 
   try {
@@ -320,10 +316,9 @@ app.get('/authorized', async (req, res) => {
   const code = req.query.code;
   try {
     const {tokens} = await oAuth2Client.getToken(code);
-    token = tokens;
-    oAuth2Client.setCredentials(token);
+    oAuth2Client.setCredentials(tokens);
     const userProfile = await getUserProfile(oAuth2Client);
-    return res.redirect(`https://automailer-frontend-production.up.railway.app/gmail?tokens=${encodeURIComponent(JSON.stringify(token))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
+    return res.redirect(`https://automailer-frontend-production.up.railway.app/gmail?tokens=${encodeURIComponent(JSON.stringify(tokens))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
   }
   catch (error) {
     console.error('Error during OAuth callback:', error);
@@ -333,14 +328,6 @@ app.get('/authorized', async (req, res) => {
 
 app.post('/logout', (req, res) => {
   try {
-    // Simply remove the token file if it exists
-    
-    // Reset global variables
-    authorized = null;
-    gmail = null;
-    userdata = null;
-    token = null;
-
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Error during logout:', error);
@@ -436,23 +423,7 @@ async function getUserProfile(auth) {
 
 // Function to authorize and get the Gmail API client
 async function authorize() {
-  let credentials = null;
-  if (token) {
-    credentials = token;
-    if (credentials && credentials.refresh_token) {
-      oAuth2Client.setCredentials(credentials);
-      try {
-        const userProfile = await getUserProfile(oAuth2Client);
-        console.log('User Profile:', userProfile);
-        return false;
-      } catch (err) {
-        console.error('Error getting user profile:', err);
-      }
-    }
-
-  }
-
-  if (!credentials || !credentials.refresh_token) {
+  
     const authUrl = oAuth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
@@ -460,7 +431,6 @@ async function authorize() {
     });
     console.log('Authorize this app by visiting this URL:', authUrl);
     return authUrl;
-  }
 }
 
 
