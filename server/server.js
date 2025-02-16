@@ -12,14 +12,6 @@ const app = express();
 app.use(cors());
 const SCOPES = ['https://www.googleapis.com/auth/gmail.send', 'https://www.googleapis.com/auth/userinfo.profile',
   'https://www.googleapis.com/auth/userinfo.email'];
-const TOKEN_PATH = 'token.json';
-
-if (fs.existsSync(TOKEN_PATH)) {
-  console.log('Cleaning up leftover token file...');
-  fs.unlinkSync(TOKEN_PATH);
-}
-
-
 
 // Set up OAuth2 credentials
 const credentials = JSON.parse(fs.readFileSync('credentials.json'));
@@ -32,11 +24,10 @@ const oAuth2Client = new OAuth2(
 let authorized = null;
 let gmail = null;
 let userdata = null;
+let token = null;
 
 // Middleware to parse JSON request bodies
 app.use(bodyParser.json());
-
-
 
 // Route to generate and send email
 app.get('/connect', async (req, res) => {
@@ -58,60 +49,6 @@ app.get('/connect', async (req, res) => {
     res.status(500).json({ error: 'Failed to connect to the mail', details: error.message });
   }
 });
-
-
-async function checkAuthorization() {
-  try {
-    // Check if token exists
-    if (fs.existsSync(TOKEN_PATH)) {
-      const token = JSON.parse(fs.readFileSync(TOKEN_PATH));
-      
-      // Set credentials
-      oAuth2Client.setCredentials(token);
-      
-      // Initialize Gmail client
-      const gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-      
-      // Try to get user profile to validate credentials
-      const userProfile = await getUserProfile(oAuth2Client);
-      
-      return { 
-        gmail, 
-        userdata: userProfile 
-      };
-    }
-    
-    // If no valid token, return null
-    return null;
-  } catch (error) {
-    console.error('Authorization check failed:', error);
-    return null;
-  }
-}
-
-// Middleware to check authorization before sending email
-const checkAuthMiddleware = async (req, res, next) => {
-  try {
-    const authResult = await checkAuthorization();
-    
-    if (!authResult) {
-      return res.status(401).json({ 
-        error: 'Not authorized', 
-        authUrl: await authorize() 
-      });
-    }
-    
-    // Attach gmail and userdata to the request
-    req.gmail = authResult.gmail;
-    req.userdata = authResult.userdata;
-    next();
-  } catch (error) {
-    console.error('Authorization middleware error:', error);
-    res.status(500).json({ error: 'Authorization check failed' });
-  }
-};
-
-// Helper function to strip HTML tags
 
 
 // Helper function to strip HTML tags
@@ -334,8 +271,12 @@ function createEmailMessage(from, to, subject, textBody, htmlBody, cc = '') {
 }
 
 // Send route handler
-app.post('/send', checkAuthMiddleware, async (req, res) => {
+app.post('/send',async (req, res) => {
+  const authHeader = req.headers.authorization;
   const { recipientEmail, emailContent, senderEmail, ccEmail = '' } = req.body;
+  if (!authHeader) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
 
   if (!recipientEmail || !emailContent || !senderEmail) {
     return res.status(400).json({
@@ -343,13 +284,22 @@ app.post('/send', checkAuthMiddleware, async (req, res) => {
       details: { recipientEmail: !!recipientEmail, emailContent: !!emailContent, senderEmail: !!senderEmail }
     });
   }
+  
+  const tokenPart = authHeader.replace('Bearer ', '');
+  const decodedToken = Buffer.from(tokenPart, 'base64').toString();
+  const tokens = JSON.parse(decodedToken);
+  token = tokens;
+  console.log('Decoded token:', tokens);
+  oAuth2Client.setCredentials(tokens);
+  gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
+  
 
   try {
     const htmlBody = createEmailBody(emailContent, req.userdata);
     const textBody = `${emailContent.heading}\n\n${emailContent.greeting}\n\n${stripHtml(emailContent.body)}\n\n${emailContent.closing}\n\nSent by ${req.userdata?.name || 'Sender'}`;
     const rawMessage = createEmailMessage(senderEmail, recipientEmail, emailContent.heading, textBody, htmlBody, ccEmail);
     
-    const result = await req.gmail.users.messages.send({
+    const result = await gmail.users.messages.send({
       userId: 'me',
       requestBody: { raw: rawMessage }
     });
@@ -366,21 +316,14 @@ app.post('/send', checkAuthMiddleware, async (req, res) => {
 
 
 
-app.get('/info', async (req, res) => {
-
-  userdata = await getUserProfile(oAuth2Client);
-  console.log('User Profile:', userdata);
-  res.json({ userdata });
-});
-
 app.get('/authorized', async (req, res) => {
   const code = req.query.code;
   try {
-    const { tokens } = await oAuth2Client.getToken(code);
-    oAuth2Client.setCredentials(tokens);
-    fs.writeFileSync(TOKEN_PATH, JSON.stringify(tokens));
-    gmail = google.gmail({ version: 'v1', auth: oAuth2Client });
-    return res.redirect('https://automailer-frontend-production.up.railway.app/gmail');
+    const {tokens} = await oAuth2Client.getToken(code);
+    token = tokens;
+    oAuth2Client.setCredentials(token);
+    const userProfile = await getUserProfile(oAuth2Client);
+    return res.redirect(`https://automailer-frontend-production.up.railway.app/gmail?tokens=${encodeURIComponent(JSON.stringify(token))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
   }
   catch (error) {
     console.error('Error during OAuth callback:', error);
@@ -391,13 +334,12 @@ app.get('/authorized', async (req, res) => {
 app.post('/logout', (req, res) => {
   try {
     // Simply remove the token file if it exists
-    if (fs.existsSync(TOKEN_PATH)) {
-      fs.unlinkSync(TOKEN_PATH);
-    }
+    
     // Reset global variables
     authorized = null;
     gmail = null;
     userdata = null;
+    token = null;
 
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
@@ -495,8 +437,8 @@ async function getUserProfile(auth) {
 // Function to authorize and get the Gmail API client
 async function authorize() {
   let credentials = null;
-  if (fs.existsSync(TOKEN_PATH)) {
-    credentials = JSON.parse(fs.readFileSync(TOKEN_PATH));
+  if (token) {
+    credentials = token;
     if (credentials && credentials.refresh_token) {
       oAuth2Client.setCredentials(credentials);
       try {
@@ -521,12 +463,6 @@ async function authorize() {
   }
 }
 
-const deleteTokenFile = () => {
-  if (fs.existsSync(TOKEN_PATH)) {
-    fs.unlinkSync(TOKEN_PATH);
-    console.log('Token file deleted on server shutdown.');
-  }
-};
 
 // Start the server
 const PORT = process.env.PORT || 5000;
