@@ -54,7 +54,7 @@ function stripHtml(html) {
 }
 
 // Function to create email body
-function createEmailBody(emailContent, userData) {
+function createEmailBody(emailContent, name) {
   const sanitize = (str) => {
     if (!str) return '';
     return str
@@ -221,14 +221,14 @@ function createEmailBody(emailContent, userData) {
         </div>
         
         <div class="email-closing">
-          ${sanitize(emailContent.closing)},<br>
-          ${sanitize(userData?.name || 'Sender')}
+          ${sanitize(emailContent.closing)}<br>
+          ${sanitize(name)}
         </div>
       </div>
       
       <div class="email-footer">
         <div class="logo-container">
-          Sent by ${sanitize(userData?.name || 'Sender')} via 
+          Sent by ${sanitize(name)} via 
           <p style="color: black;font-size: 12px; font-weight: 600; margin-left:5px"> Auto Mailer</p>
         </div>
       </div>
@@ -270,7 +270,7 @@ function createEmailMessage(from, to, subject, textBody, htmlBody, cc = '') {
 // Send route handler
 app.post('/send',async (req, res) => {
   const authHeader = req.headers.authorization;
-  const { recipientEmail, emailContent, senderEmail, ccEmail = '' } = req.body;
+  const { recipientEmail, emailContent, senderEmail ,senderName} = req.body;
   if (!authHeader) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
@@ -291,9 +291,9 @@ app.post('/send',async (req, res) => {
   
 
   try {
-    const htmlBody = createEmailBody(emailContent, req.userdata);
+    const htmlBody = createEmailBody(emailContent, senderName);
     const textBody = `${emailContent.heading}\n\n${emailContent.greeting}\n\n${stripHtml(emailContent.body)}\n\n${emailContent.closing}\n\nSent by ${req.userdata?.name || 'Sender'}`;
-    const rawMessage = createEmailMessage(senderEmail, recipientEmail, emailContent.heading, textBody, htmlBody, ccEmail);
+    const rawMessage = createEmailMessage(senderEmail, recipientEmail, emailContent.heading, textBody, htmlBody);
     
     const result = await gmail.users.messages.send({
       userId: 'me',
