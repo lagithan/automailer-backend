@@ -318,7 +318,7 @@ app.get('/authorized', async (req, res) => {
     const {tokens} = await oAuth2Client.getToken(code);
     oAuth2Client.setCredentials(tokens);
     const userProfile = await getUserProfile(oAuth2Client);
-    return res.redirect(`https://automailer-frontend-production.up.railway.app/gmail?tokens=${encodeURIComponent(JSON.stringify(tokens))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
+    return res.redirect(`https://automailer-frontend-production-809e.up.railway.app//gmail?tokens=${encodeURIComponent(JSON.stringify(tokens))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
   }
   catch (error) {
     console.error('Error during OAuth callback:', error);
