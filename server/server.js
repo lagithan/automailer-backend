@@ -318,7 +318,7 @@ app.get('/authorized', async (req, res) => {
     const {tokens} = await oAuth2Client.getToken(code);
     oAuth2Client.setCredentials(tokens);
     const userProfile = await getUserProfile(oAuth2Client);
-    return res.redirect(`https://automailer-frontend-production-809e.up.railway.app//gmail?tokens=${encodeURIComponent(JSON.stringify(tokens))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
+    return res.redirect(`https://automailer-frontend-production.up.railway.app/gmail?tokens=${encodeURIComponent(JSON.stringify(tokens))}&userData=${encodeURIComponent(JSON.stringify(userProfile))}`);
   }
   catch (error) {
     console.error('Error during OAuth callback:', error);
@@ -349,7 +349,7 @@ app.post('/generate', async (req, res) => {
 // Function to generate email content using Gemini AI
 async function generateEmail(formData) {
   try {
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const genAI = new GoogleGenerativeAI("AIzaSyCd_8DhvJ9Pm8tO4aBL0hahkptVuVAvpSE");
 
     const model = genAI.getGenerativeModel({
       model: "gemini-1.5-flash",
